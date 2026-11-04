@@ -15,11 +15,15 @@
  * Time Utilities
  */
 
-// Time sync state
-volatile time_t _last_ntp_sync = 0;
+/* Return the time of the last successful NTP sync, or 0 if never synced */
+inline volatile time_t& get_last_time_sync() {
+    static volatile time_t last_sync = 0;
+    return last_sync;
+}
 
+/* Set the time stamp of the latest NTP sync */
 inline void _on_ntp_sync(struct timeval *tv) {
-    _last_ntp_sync = tv->tv_sec;
+    get_last_time_sync() = tv->tv_sec;
 }
 
 /* 64-bit version of the standard Arduino millis() function */
@@ -39,11 +43,6 @@ inline String format_epoch(unsigned long t, const char* fmt) {
 /* Poll the current time and convert it into a YYYY/MM/DD HH:MM:SS string */
 inline String format_now(const char* fmt) {
     return format_epoch(time(nullptr), fmt);
-}
-
-/* Return the time of the last successful NTP sync, or 0 if never synced */
-inline time_t get_last_time_sync() {
-    return _last_ntp_sync;
 }
 
 /*

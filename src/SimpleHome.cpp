@@ -9,11 +9,13 @@
 
 /* Log WiFi events so that we can keep track of them */
 void SimpleHome::_wifi_log_event(uint8_t reason) {
-    WiFiLogEntry &e = _wifi_log[_wifi_log_count % SH_WIFI_LOG_SIZE];
+    WiFiLogEntry e;
     e.time = time(nullptr);
     e.uptime_ms = now_millis();
     e.reason = reason;
-    _wifi_log_count++;
+    portENTER_CRITICAL(&_wifi_log_mux);
+    _wifi_log.push(e);
+    portEXIT_CRITICAL(&_wifi_log_mux);
 }
 
 /* Handler for serving up the /restart page */
@@ -49,26 +51,25 @@ void SimpleHome::_handle_identify_json() {
     char core_ver[16];
     snprintf(core_ver, sizeof(core_ver), "%d.%d.%d", ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
     
-    String body = String("{\n");
-    body += " \"name\": \"" + String(this->name()) + "\",\n";
-    body += " \"simplehome\": \"" SH_VERSION "\",\n";
-    body += " \"mac\": \"" + WiFi.macAddress() + "\",\n";
-    //body += " \"ip\": \"" + WiFi.localIP().toString() + "\",\n";
-    body += " \"board\": \"" ARDUINO_BOARD "\",\n";
-    body += " \"variant\": \"" ARDUINO_VARIANT "\",\n";
-    body += " \"target\": \"" CONFIG_IDF_TARGET "\",\n";
-    body += " \"chip\": \"" + String(ESP.getChipModel()) + "\",\n";
-    body += " \"chip_revision\": " + String(ESP.getChipRevision()) + ",\n";
-    body += " \"cores\": " + String(ESP.getChipCores()) + ",\n";
-    body += " \"cpu_mhz\": " + String(ESP.getCpuFreqMHz()) + ",\n";
-    body += " \"flash_bytes\": " + String(ESP.getFlashChipSize()) + ",\n";
-    body += " \"arduino_core\": \"" + String(core_ver) + "\",\n";
-    body += " \"idf\": \"" + String(ESP.getSdkVersion()) + "\",\n";
-    //body += " \"sketch_md5\": \"" + ESP.getSketchMD5() + "\",\n";
-    body += " \"built\": \"" __DATE__ " " __TIME__ "\"\n";
-    body += "}\n";
-    
-    server.send(200, "application/json", body);
+    JSONObject body;
+    body.add("name", this->name());
+    body.add("simplehome", SH_VERSION);
+    body.add("mac", WiFi.macAddress());
+    //body.add("ip", WiFi.localIP().toString());
+    body.add("board", ARDUINO_BOARD);
+    body.add("variant", ARDUINO_VARIANT);
+    body.add("target", CONFIG_IDF_TARGET);
+    body.add("chip", ESP.getChipModel());
+    body.add("chip_revision", ESP.getChipRevision());
+    body.add("cores", ESP.getChipCores());
+    body.add("cpu_mhz", ESP.getCpuFreqMHz());
+    body.add("flash_bytes", ESP.getFlashChipSize());
+    body.add("arduino_core", core_ver);
+    body.add("idf", ESP.getSdkVersion());
+    //body.add("sketch_md5", ESP.getSketchMD5());
+    body.add("built", __DATE__ " " __TIME__);
+
+    server.send(200, "application/json", body.render());
 }
 
 /* Handler for serving up the /status page */
@@ -82,23 +83,30 @@ void SimpleHome::_handle_status() {
     float tsoc = get_soc_temp();
     long rssi = WiFi.RSSI();
     
+    portENTER_CRITICAL(&_wifi_log_mux);
+    RingBuffer<WiFiLogEntry, SH_WIFI_LOG_SIZE> wifi_log = _wifi_log;
+    portEXIT_CRITICAL(&_wifi_log_mux);
+    
     String body = String(PAGE_HEAD);
     body.replace("%TITLE%", this->name());
-    body += "Uptime: " + String(uptime) + "<br>\n";
-    body += "Last reboot: " + String(reason) + "<br>\n";
-    body += "Watchdog: " + String(status) + "<br>\n";
-    body += "Last time sync: " + (synced ? format_epoch(synced, "%Y/%m/%d %H:%M:%S") : String("never")) + "<br>\n";
-    body += "<br>\n";
-    body += "Free heap size: " + String(mem.free_heap) + "B<br>\n";
-    body += "Min free heap size: " + String(mem.min_free_heap) + "B<br>\n";
-    body += "Heap fragmentation: " + String(mem.fragmentation*100.0) + "%<br>\n";
-    body += "<br>\n";
-    body += "SoC temperature: " + String(tsoc) + " C<br>\n";
-    body += "WiFi signal strength: " + String(rssi) + " dBm<br>\n";
-    body += "WiFi connects: " + String(_wifi_nconnect) + "<br>\n";
-    body += "WiFi disconnects: " + String(_wifi_ndisconnect) + "<br>\n";
-    body += "<br>\n";
-    body += "Updated: " + format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S") + "<br>\n";
+    TwoColumnTable table;
+    table.add_row("Uptime", String(uptime));
+    table.add_row("Last reboot", reason);
+    table.add_row("Watchdog", status);
+    table.add_row("Last time sync", synced ? format_epoch(synced, "%Y/%m/%d %H:%M:%S") : String("never"));
+    table.add_row("Free heap size", mem.free_heap, "B");
+    table.add_row("Min free heap size", mem.min_free_heap, "B");
+    table.add_row("Heap fragmentation", mem.fragmentation*100.0, "%");
+    table.add_row("SoC temperature", tsoc, "C");
+    table.add_row("WiFi signal strength", rssi, "dBm");
+    table.add_row("WiFi connects", _wifi_nconnect);
+    table.add_row("WiFi disconnects", _wifi_ndisconnect);
+    //for(size_t i=0; i<wifi_log.size(); i++) {
+    //    const WiFiLogEntry &e = wifi_log[i];
+    //    table.add_row(format_epoch(e.time, "%Y/%m/%d %H:%M:%S"), e.reason ? "disconnected, reason " + String(e.reason) : String("connected"));
+    //}
+    table.add_row("Updated", format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S"));
+    body += table;
     body += String(PAGE_FOOT);
     
     server.send(200, "text/html", body);
@@ -115,22 +123,35 @@ void SimpleHome::_handle_status_json() {
     float tsoc = get_soc_temp();
     long rssi = WiFi.RSSI();
     
-    String body = String("{\n");
-    body += " \"uptime\": " + String(uptime) + ",\n";
-    body += " \"last_reboot\": \"" + String(reason) + "\",\n";
-    body += " \"watchdog\": \"" + String(status) + "\",\n";
-    body += " \"last_time_sync\": \"" + (synced ? format_epoch(synced, "%Y/%m/%d %H:%M:%S") : String("never")) + "\",\n";
-    body += " \"free_heap\": " + String(mem.free_heap) + ",\n";
-    body += " \"min_free_heap\": " + String(mem.min_free_heap) + ",\n";
-    body += " \"heap_fragmentation\": " + String(mem.fragmentation) + ",\n";
-    body += " \"temp_soc\": " + String(tsoc) + ",\n";
-    body += " \"wifi_signal_strength\": " + String(rssi) + ",\n";
-    body += " \"wifi_connects\": " + String(_wifi_nconnect) + ",\n";
-    body += " \"wifi_disconnects\": " + String(_wifi_ndisconnect) + ",\n";
-    body += " \"updated\": \"" + format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S") + "\"\n";
-    body += "}";
+    portENTER_CRITICAL(&_wifi_log_mux);
+    RingBuffer<WiFiLogEntry, SH_WIFI_LOG_SIZE> wifi_log = _wifi_log;
+    portEXIT_CRITICAL(&_wifi_log_mux);
     
-    server.send(200, "application/json", body);
+    JSONObject body;
+    body.add("uptime", uptime);
+    body.add("last_reboot", reason);
+    body.add("watchdog", status);
+    body.add("last_time_sync", synced ? format_epoch(synced, "%Y/%m/%d %H:%M:%S") : String("never"));
+    body.add("free_heap", mem.free_heap);
+    body.add("min_free_heap", mem.min_free_heap);
+    body.add("heap_fragmentation", mem.fragmentation);
+    body.add("temp_soc", tsoc);
+    body.add("wifi_signal_strength", rssi);
+    body.add("wifi_connects", _wifi_nconnect);
+    body.add("wifi_disconnects", _wifi_ndisconnect);
+    body.add("updated", format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S"));
+    //JSONArray wifi_events;
+    //for(size_t i=0; i<wifi_log.size(); i++) {
+    //    const WiFiLogEntry &e = wifi_log[i];
+    //    JSONObject entry;
+    //    entry.add("time", format_epoch(e.time, "%Y/%m/%d %H:%M:%S"));
+    //    entry.add("uptime_ms", (long long) e.uptime_ms);
+    //    entry.add("reason", (int) e.reason);
+    //    wifi_events.add(entry);
+    //}
+    //body.add("wifi_log", wifi_events);
+    
+    server.send(200, "application/json", body.render());
 }
 
 /* Add a new periodic task to the task pool */
@@ -218,8 +239,10 @@ void SimpleHome::loop() {
             
             // Disconnect and reconnect
             WiFi.disconnect();
-            WiFi.config(staticIP, gateway, subnet, primaryDNS, secondaryDNS);
-            WiFi.begin(ssid, pass);
+            if( _static_ip ) {
+                WiFi.config(_ip, _gateway, _subnet, _dns1, _dns2);
+            }
+            WiFi.begin(_ssid, _pass);
             
             // Feed the watchdog to account for a slow connect
             esp_task_wdt_reset();

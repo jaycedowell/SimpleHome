@@ -2,10 +2,11 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
-#include <ESP32Time.h>
 
 #include "battery.hpp"
-#include "pages.hpp"
+#include "html.hpp"
+#include "json.hpp"
+#include "ring_buffer.hpp"
 #include "utils.hpp"
 
 #define SH_VERSION "0.0.0"
@@ -49,8 +50,8 @@ class SimpleHome {
     int32_t  _wifi_nattempt;
     volatile uint32_t _wifi_ndisconnect = 0;
     volatile uint32_t _wifi_nconnect = 0;
-    WiFiLogEntry _wifi_log[SH_WIFI_LOG_SIZE] = {0};
-    volatile uint32_t _wifi_log_count = 0;
+    RingBuffer<WiFiLogEntry, SH_WIFI_LOG_SIZE> _wifi_log;
+    portMUX_TYPE _wifi_log_mux = portMUX_INITIALIZER_UNLOCKED;
     
     void _wifi_log_event(uint8_t reason);
     
