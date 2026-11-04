@@ -28,7 +28,7 @@ void SimpleHome::_handle_restart() {
         body.replace("%TITLE%", this->name());
         server.send(200, "text/html", body);
     } else {
-        if( !server.authenticate(auth_username, auth_password)) {
+        if( !server.authenticate(_auth_user, _auth_pass)) {
             return server.requestAuthentication(BASIC_AUTH, this->name());
         }
         
