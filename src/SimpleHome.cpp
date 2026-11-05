@@ -101,8 +101,7 @@ void SimpleHome::_handle_status() {
     table.add_row("WiFi signal strength", rssi, "dBm");
     table.add_row("WiFi connects", _wifi_nconnect);
     table.add_row("WiFi disconnects", _wifi_ndisconnect);
-    //for(size_t i=0; i<wifi_log.size(); i++) {
-    //    const WiFiLogEntry &e = wifi_log[i];
+    //for(const WiFiLogEntry &e : wifi_log) {
     //    table.add_row(format_epoch(e.time, "%Y/%m/%d %H:%M:%S"), e.reason ? "disconnected, reason " + String(e.reason) : String("connected"));
     //}
     table.add_row("Updated", format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S"));
@@ -141,8 +140,7 @@ void SimpleHome::_handle_status_json() {
     body.add("wifi_disconnects", _wifi_ndisconnect);
     body.add("updated", format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S"));
     //JSONArray wifi_events;
-    //for(size_t i=0; i<wifi_log.size(); i++) {
-    //    const WiFiLogEntry &e = wifi_log[i];
+    //for(const WiFiLogEntry &e : wifi_log) {
     //    JSONObject entry;
     //    entry.add("time", format_epoch(e.time, "%Y/%m/%d %H:%M:%S"));
     //    entry.add("uptime_ms", (long long) e.uptime_ms);
