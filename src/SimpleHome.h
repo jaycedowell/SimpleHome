@@ -27,6 +27,10 @@
     #define SH_WIFI_LOG_SIZE 8
 #endif
 
+#ifndef SH_MAX_NLINK
+    #define SH_MAX_NLINK 6
+#endif
+
 // Structure to hold a task that periodically runs
 typedef struct _Task {
     uint32_t period_ms;
@@ -47,6 +51,12 @@ typedef struct _WiFiLogEntry {
     int64_t  uptime_ms;
     uint8_t  reason;
 } WiFiLogEntry;
+
+// Structure to hold a single link and the link's title
+typedef struct _Link {
+    const char* page;
+    const char* title;
+} Link;
  
 class SimpleHome {
     const char *_name;
@@ -73,6 +83,9 @@ class SimpleHome {
     const char *_auth_user = nullptr, *_auth_pass = nullptr;
     bool _static_ip = false;
     IPAddress _ip, _gateway, _subnet, _dns1, _dns2;
+    
+    Link _links[SH_MAX_NLINK];
+    int _nlink = 0;
     
     void _handle_restart();
     void _handle_identify_json();
@@ -104,6 +117,12 @@ public:
         _auth_user = user;
         _auth_pass = pass;
     }
+    inline void register_navigation_link(const char *page, const char *title) {
+        if( _nlink < SH_MAX_NLINK ) {
+            _links[_nlink++] = {page, title};
+        }
+    }
+    HTMLPage get_base_html_page();
     void every(uint32_t period_ms, void (*fnc)());
     void after(uint32_t wait_ms, void (*fnc)());
     void begin();

@@ -18,18 +18,28 @@ void SimpleHome::_wifi_log_event(uint8_t reason) {
     portEXIT_CRITICAL(&_wifi_log_mux);
 }
 
+/* Get a base HTMLPage object that can be used for rendering a page */
+HTMLPage SimpleHome::get_base_html_page() {
+    HTMLPage page(this->name());
+    for(int i=0; i<_nlink; i++) {
+        page.add_navigation_link(_links[i].page, _links[i].title, server.uri() == _links[i].page);
+    }
+    return page;
+}
+
 /* Handler for serving up the /restart page */
 void SimpleHome::_handle_restart() {
     if( server.method() != HTTP_POST ) {
         // GET (or anything else): show the confirmation button
-        String body = String(PAGE_HEAD);
-        body += "<form method=\"post\" action=\"/restart\">\n";
-        body += " <button type=\"submit\">Restart %TITLE%</button>\n";
-        body += "</form>\n";
-        body += String(PAGE_FOOT);
-        body.replace("%TITLE%", this->name());
-        
-        server.send(200, "text/html", body);
+        String content = String();
+        content += "<form method=\"post\" action=\"/restart\">\n";
+        content += " <button type=\"submit\">Restart " + String(this->name()) + "</button>\n";
+        content += "</form>\n";
+
+        HTMLPage page = this->get_base_html_page();
+        page.add_content(content);
+
+        server.send(200, "text/html", page.render());
     } else {
         if( !server.authenticate(_auth_user, _auth_pass)) {
             return server.requestAuthentication(BASIC_AUTH, this->name());
@@ -37,12 +47,10 @@ void SimpleHome::_handle_restart() {
 
         this->after(500, delayed_restart_esp);
 
-        String body = String(PAGE_HEAD);
-        body.replace("%TITLE%", this->name());
-        body += "Restarting in 5 s...<br>\n";
-        body += String(PAGE_FOOT);
-        
-        server.send(200, "text/html", body);
+        HTMLPage page = this->get_base_html_page();
+        page.add_content("Restarting in 5 s...<br>\n");
+
+        server.send(200, "text/html", page.render());
     }
 }
 
@@ -87,8 +95,6 @@ void SimpleHome::_handle_status() {
     RingBuffer<WiFiLogEntry, SH_WIFI_LOG_SIZE> wifi_log = _wifi_log;
     portEXIT_CRITICAL(&_wifi_log_mux);
     
-    String body = String(PAGE_HEAD);
-    body.replace("%TITLE%", this->name());
     TwoColumnTable table;
     table.add_row("Uptime", String(uptime));
     table.add_row("Last reboot", reason);
@@ -105,10 +111,11 @@ void SimpleHome::_handle_status() {
     //    table.add_row(format_epoch(e.time, "%Y/%m/%d %H:%M:%S"), e.reason ? "disconnected, reason " + String(e.reason) : String("connected"));
     //}
     table.add_row("Updated", format_epoch(time(nullptr), "%Y/%m/%d %H:%M:%S"));
-    body += table;
-    body += String(PAGE_FOOT);
     
-    server.send(200, "text/html", body);
+    HTMLPage page = this->get_base_html_page();
+    page.add_content(table);
+
+    server.send(200, "text/html", page.render());
 }
 
 /* Handler for serving up the /status.json page (JSON version of /status) */
@@ -199,7 +206,7 @@ void SimpleHome::begin() {
     // Start the web server
     server.begin();
     
-    // Register the default pages
+    // Register the default page handlers
     server.on("/restart", [this]() { _handle_restart(); });
     server.on("/identify.json", [this]() { _handle_identify_json(); });
     server.on("/status", [this]() { _handle_status(); });

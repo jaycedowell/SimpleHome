@@ -27,6 +27,8 @@ static const char PAGE_HEAD[] = R"html(<!DOCTYPE html>
         tr:last-child td { border-bottom: 0; }
         td:first-child { padding-right: 1em; color: var(--muted); }
         button { font: inherit; color: var(--card); background: var(--accent); padding: .4em 1em; border: 0; border-radius: .3em; cursor: pointer; }
+        nav { display: flex; gap: 1em; margin: -.3em 0 1em; }
+        nav a.active { font-weight: 600; text-decoration: none; color: var(--text); }
     </style>
 </head>
 <body>
@@ -92,6 +94,31 @@ public:
     
     inline String render() const {
         return "<table>\n" + _rows + "</table>\n";
+    }
+    inline operator String() const { return render(); }
+};
+
+class HTMLPage {
+    String _title;
+    String _navigation;
+    String _content;
+public:
+    HTMLPage(const String &title) : _title(title) {}
+    inline void add_navigation_link(const String &page, const String &title, bool active=false) {
+        _navigation += "<a href=\"" + page + "\"" + (active ? " class=\"active\"" : "") + ">" + title + "</a>";
+    }
+    inline void add_content(const String &content) {
+        _content += content;
+    }
+    inline String render() const {
+        String body = String(PAGE_HEAD);
+        body.replace("%TITLE%", _title);
+        if( _navigation.length() ) {
+            body += "<nav>" + _navigation + "</nav>\n";
+        }
+        body += _content;
+        body += String(PAGE_FOOT);
+        return body;
     }
     inline operator String() const { return render(); }
 };
