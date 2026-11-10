@@ -15,6 +15,10 @@
     #define SH_MAX_NTASK 8
 #endif
 
+#ifndef SH_MAX_NEVENT
+    #define SH_MAX_NEVENT 8
+#endif
+
 #ifndef SH_WD_TIMEOUT_MS
     #define SH_WD_TIMEOUT_MS 45000
 #endif
@@ -30,6 +34,13 @@ typedef struct _Task {
     void (*fnc)();
 } Task;
 
+// Structure to hold a single shot event
+typedef struct _Event {
+    uint64_t when;
+    uint8_t active;
+    void (*fnc)();
+} Event;
+
 // Structure to hold changes in the WiFi state
 typedef struct _WiFiLogEntry {
     time_t   time;
@@ -44,6 +55,9 @@ class SimpleHome {
     
     Task _tasks[SH_MAX_NTASK];
     int _ntask = 0;
+    
+    Event _events[SH_MAX_NEVENT] = {0};
+    int _nevent = 0;
     
     uint64_t _wifi_last_ok;
     uint64_t _wifi_last_attempt;
@@ -68,7 +82,7 @@ class SimpleHome {
 public:
     WebServer server{80};
     
-    SimpleHome(const char* name, const byte* icon, size_t icon_size): _ntask(0), _wifi_last_ok(0), _wifi_last_attempt(0), _wifi_nattempt(0) {
+    SimpleHome(const char* name, const byte* icon, size_t icon_size): _ntask(0), _nevent(0), _wifi_last_ok(0), _wifi_last_attempt(0), _wifi_nattempt(0) {
         _name = name;
         _icon = icon;
         _icon_size = icon_size;
@@ -91,6 +105,7 @@ public:
         _auth_pass = pass;
     }
     void every(uint32_t period_ms, void (*fnc)());
+    void after(uint32_t wait_ms, void (*fnc)());
     void begin();
     void loop();
 };

@@ -28,21 +28,21 @@ void SimpleHome::_handle_restart() {
         body += "</form>\n";
         body += String(PAGE_FOOT);
         body.replace("%TITLE%", this->name());
+        
         server.send(200, "text/html", body);
     } else {
         if( !server.authenticate(_auth_user, _auth_pass)) {
             return server.requestAuthentication(BASIC_AUTH, this->name());
         }
-        
+
+        this->after(500, delayed_restart_esp);
+
         String body = String(PAGE_HEAD);
         body.replace("%TITLE%", this->name());
         body += "Restarting in 5 s...<br>\n";
         body += String(PAGE_FOOT);
+        
         server.send(200, "text/html", body);
-        
-        delay(500);
-        
-        delayed_restart_esp();
     }
 }
 
@@ -159,6 +159,17 @@ void SimpleHome::every(uint32_t period_ms, void (*fnc)()) {
     }
 }
 
+/* Add a new single shot event to the event pool */
+void SimpleHome::after(uint32_t wait_ms, void (*fnc)()) {
+    for(int i=0; i<SH_MAX_NEVENT; i++) {
+        if( !_events[i].active ) {
+            _events[i] = {now_millis() + wait_ms, 1, fnc};
+            _nevent++;
+            break;
+        }
+    }
+}
+
 /* setup() function to help bring up SimpleHome and set its default functionality */
 void SimpleHome::begin() {
     // Setup serial for debugging on the bench
@@ -255,6 +266,22 @@ void SimpleHome::loop() {
             // Feed the watchdog again to account for a slow task
             esp_task_wdt_reset();
         }
+    }
+    
+    
+    if( _nevent ) {
+        int nprocessed = 0;
+        for(int i=0; i<SH_MAX_NEVENT; i++) {
+            if( _events[i].active && (now >= _events[i].when) ) {
+                _events[i].fnc();
+                _events[i].active = 0;
+                nprocessed++;
+                
+                // Feed the watchdog again to account for a slow event
+                esp_task_wdt_reset();
+            }
+        }
+        _nevent -= nprocessed;
     }
     
     // Yield so the CPU can idle between loop calls
