@@ -27,8 +27,10 @@ static const char PAGE_HEAD[] = R"html(<!DOCTYPE html>
         tr:last-child td { border-bottom: 0; }
         td:first-child { padding-right: 1em; color: var(--muted); }
         button { font: inherit; color: var(--card); background: var(--accent); padding: .4em 1em; border: 0; border-radius: .3em; cursor: pointer; }
-        nav { display: flex; gap: 1em; margin: -.3em 0 1em; }
-        nav a.active { font-weight: 600; text-decoration: none; color: var(--text); }
+        nav { display: flex; width: fit-content; flex-wrap: wrap; gap: .2em; padding: .2em; margin: 0 0 1em; font-size: .9em; background: var(--bg); border-radius: .45em; }
+        nav a { padding: 0 .7em; border-radius: .3em; text-decoration: none; color: var(--muted); }
+        nav a:hover { color: var(--accent); }
+        nav a.active { color: var(--accent); background: var(--card); font-weight: 600; }
     </style>
 </head>
 <body>
